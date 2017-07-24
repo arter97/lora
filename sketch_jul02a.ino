@@ -8,9 +8,22 @@
 const int numDevices = 4;      // number of MAX7219s used
 const long scrollDelay = 50;   // adjust scrolling speed
 
+const int motorPin = 12;
+
 unsigned long bufferLong [16] = {0}; 
 
 LedControl lc = LedControl(5,7,6,numDevices);
+
+void vib() {
+    digitalWrite(motorPin, HIGH);
+    delay(250);
+    digitalWrite(motorPin, LOW);
+    delay(200);
+    digitalWrite(motorPin, HIGH);
+    delay(250);
+    digitalWrite(motorPin, LOW);
+    //delay(200);
+}
 
 void setup(){
     for (int x=0; x<numDevices; x++){
@@ -18,10 +31,13 @@ void setup(){
         lc.setIntensity(x,10);       // Set the brightness to default value
         lc.clearDisplay(x);         // and clear the display
     }
+    pinMode(motorPin, OUTPUT);
+
     //Serial.begin(9600);
 }
 
-void loop(){ 
+void loop(){
+        
     scrollMessage();
     // scrollFont();
 }
@@ -54,10 +70,11 @@ int trim_matrix(const unsigned char* font) {
     return ret + 1;
 }
 
-void scrollFont() {
-    for (int counter=0x20;counter<0x80;counter++){
-        loadBufferLong(counter);
-        delay(500);
+// Show Message without scrolling
+void staticMessage() {
+    int fontsize = sizeof(font5x7) / 8;
+    for (int counter = 0; counter < fontsize; counter++){
+        loadBufferLong(counter, true);
     }
 }
 
@@ -65,13 +82,13 @@ void scrollFont() {
 void scrollMessage() {
     int fontsize = sizeof(font5x7) / 8;
     for (int counter = 0; counter < fontsize; counter++){
-        loadBufferLong(counter);
+        loadBufferLong(counter, false);
     }
 }
+
 // Load character into scroll buffer
-void loadBufferLong(int offset){
+void loadBufferLong(int offset, bool still) {
         for (int a=0;a<8;a++){                      // Loop 7 times for a 5x7 font
-          Serial.println((unsigned char)*(font5x7 + (offset * 8) + a));
             unsigned long c = pgm_read_byte_near(font5x7 + (offset * 8) + a);     // Index into character table to get row data
             unsigned long x = bufferLong [a*2];     // Load current scroll buffer
             x = x | c;                              // OR the new character onto end of current
