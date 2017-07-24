@@ -12,26 +12,23 @@ unsigned long bufferLong [16] = {0};
 
 LedControl lc = LedControl(5,7,6,numDevices);
 
-const unsigned char scrollText[] PROGMEM ={
-    "This is a test!!\0"};
-
 void setup(){
     for (int x=0; x<numDevices; x++){
         lc.shutdown(x,false);       //The MAX72XX is in power-saving mode on startup
-        lc.setIntensity(x,1);       // Set the brightness to default value
+        lc.setIntensity(x,10);       // Set the brightness to default value
         lc.clearDisplay(x);         // and clear the display
     }
-    Serial.begin(9600);
+    //Serial.begin(9600);
 }
 
 void loop(){ 
-    scrollMessage(scrollText);
+    scrollMessage();
     // scrollFont();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-int trim_matrix(const unsigned char* font, const char ascii) {
+int trim_matrix(const unsigned char* font) {
     int i;
     int j;
     const unsigned char product = 1;
@@ -65,38 +62,29 @@ void scrollFont() {
 }
 
 // Scroll Message
-void scrollMessage(const unsigned char * messageString) {
-    int counter = 0;
-    int myChar=0;
-    do {
-        // read back a char 
-        myChar =  pgm_read_byte_near(messageString + counter); 
-        if (myChar != 0){
-            loadBufferLong(myChar);
-        }
-        counter++;
-    } 
-    while (myChar != 0);
+void scrollMessage() {
+    int fontsize = sizeof(font5x7) / 8;
+    for (int counter = 0; counter < fontsize; counter++){
+        loadBufferLong(counter);
+    }
 }
 // Load character into scroll buffer
-void loadBufferLong(int ascii){
-    if (ascii >= 0x20 && ascii <=0x7f){
+void loadBufferLong(int offset){
         for (int a=0;a<8;a++){                      // Loop 7 times for a 5x7 font
-          Serial.println((unsigned char)*(font5x7 + ((ascii - 0x20) * 8) + a));
-            unsigned long c = pgm_read_byte_near(font5x7 + ((ascii - 0x20) * 8) + a);     // Index into character table to get row data
+          Serial.println((unsigned char)*(font5x7 + (offset * 8) + a));
+            unsigned long c = pgm_read_byte_near(font5x7 + (offset * 8) + a);     // Index into character table to get row data
             unsigned long x = bufferLong [a*2];     // Load current scroll buffer
             x = x | c;                              // OR the new character onto end of current
             bufferLong [a*2] = x;                   // Store in buffer
         }
         //byte count = pgm_read_byte_near(font5x7 +((ascii - 0x20) * 9) + 8);     // Index into character table for kerning data
-        int count = trim_matrix(font5x7 + ((ascii - 0x20) * 8), ascii);
+        int count = trim_matrix(font5x7 + (offset * 8));
         //byte count = 6;
         for (int x=0; x<count;x++){
             rotateBufferLong();
             printBufferLong();
             delay(scrollDelay);
         }
-    }
 }
 // Rotate the buffer
 void rotateBufferLong(){
