@@ -1,103 +1,172 @@
-#include <Wire.h>
-#include <SPI.h>
-#include <Adafruit_PN532.h>
-#include <LoRaShield.h>
-#include <Thread.h>
+// based on an orginal sketch by Arduino forum member "danigom"
+// http://forum.arduino.cc/index.php?action=profile;u=188950
 
-#define PN532_IRQ   (9) // (2)  <- changed to D9 for IRQ pin, refer to schematic
-#define PN532_RESET (8) // (3)  <- changed to D8 for nReset pin, refer to schematic
-Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
-LoRaShield LoRa(10, 11);
+#include <avr/pgmspace.h>
+#include <LedControl.h>
+#include "font.h"
 
-Thread nfcThread = Thread();
+const int numDevices = 4;	// number of MAX7219s used
+const long scrollDelay = 50;	// adjust scrolling speed
 
-void setup(void) {
-    nfcThread.onRun(nfcReader);
-    nfcThread.setInterval(5);
-  
-    /* This PN532 I2C example is modified by DotoriKing from original Adafruit PN532 example */
-    Serial.begin(115200);
-    LoRa.begin(38400);
- 
-    nfc.begin();
- 
-    uint32_t versiondata = nfc.getFirmwareVersion();
-    if (! versiondata)
-    {
-        Serial.print("\r\nDidn't find PN53x board");
-        while (1); // halt
-    }
- 
-    // Got ok data, print it out!
-    Serial.print("\r\nFound chip PN5");
-    Serial.print((versiondata>>24) & 0xFF, HEX);
-    Serial.print("\r\nFirmware ver. ");
-    Serial.print((versiondata>>16) & 0xFF, DEC);
-    Serial.print('.');
-    Serial.print((versiondata>>8) & 0xFF, DEC);
-    
-    nfc.setPassiveActivationRetries(0xFF);
- 
-    nfc.SAMConfig();
- 
-    Serial.print("\r\nWaiting for an ISO14443A card");
-}
- 
-void nfcReader(void)
+const int motorPin = 12;
+
+unsigned long bufferLong[16] = { 0 };
+
+LedControl lc = LedControl(5, 7, 6, numDevices);
+
+void vib()
 {
-    boolean success;
-    uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };
-    uint8_t uidLength;
-    char arr[2];
-    char temparr[18]={0};
-    temparr[17]='\0';
-    temparr[0]='0';
-    temparr[1]='1';
-    temparr[2]='1';
-    temparr[3]='3';
-    temparr[4]='4';
-    success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength, 50);
- 
-    if (success)
-    {
-        Serial.print("\r\nFound a card!");
-        Serial.print("\r\nUID Length: ");
-        Serial.print(uidLength, DEC);
-        Serial.print(" bytes");
-        Serial.print("\r\nUID Value: ");
-        int a=5;
-        Serial.print("0x4");
- 
-        for (uint8_t i = 1; i < uidLength; i++)
-        {
-            Serial.print(" 0x");
-            Serial.print(uid[i], HEX);
-            itoa(uid[i],arr,16);
-            temparr[a]=arr[0];
-            temparr[a+1]=arr[1];
-            a=a+2;
-        }
-        Serial.print("\n");
-        Serial.print(temparr);
-        Serial.print("\n");
-        LoRa.SendMessage(temparr,HEX);
-        Serial.print("sended in hex\n");
- 
-        // Wait 1 second before continuing
-        delay(1000);
-    }
-    else
-    {
-        // PN532 probably timed out waiting for a card
-        Serial.print("\r\nTimed out waiting for a card");
-    }
+	digitalWrite(motorPin, HIGH);
+	delay(250);
+	digitalWrite(motorPin, LOW);
+	delay(100);
+	digitalWrite(motorPin, HIGH);
+	delay(250);
+	digitalWrite(motorPin, LOW);
+	//delay(200);
 }
 
-void loop(void) {
-  if (nfcThread.shouldRun()) {
-    nfcThread.run();
+void setup()
+{
+	for (int x = 0; x < numDevices; x++) {
+		lc.shutdown(x, false);	//The MAX72XX is in power-saving mode on startup
+		lc.setIntensity(x, 10);	// Set the brightness to default value
+		lc.clearDisplay(x);	// and clear the display
+	}
+	pinMode(motorPin, OUTPUT);
+
+	//Serial.begin(9600);
+}
+
+void loop()
+{
+  vib();
+	showMessage(false);
+	// scrollFont();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int trim_matrix(const unsigned char *font)
+{
+	int i;
+	int j;
+	const unsigned char product = 1;
+	int ret = 0;
+	unsigned char temp;
+
+	for (i = 0; i < 8; i++) {
+		temp = pgm_read_byte_near((font + i));
+		for (j = 0; j < 8; j++) {
+			if ((product & temp) == 1) {
+				if (ret < (8 - j)) {	// 8-j == length
+					ret = 8 - j;
+				}
+				break;
+			}
+			temp = (temp >> 1);
+		}
+	}
+
+	if (ret == 0)
+		return 3;	// Space
+
+	return ret + 1;
+}
+
+// Show Message
+void showMessage(bool still)
+{
+	int fontsize = sizeof(font5x7) / 8;
+	for (int counter = 0; counter < fontsize; counter++) {
+		loadBufferLong(counter, still);
+	}
+  if (still) {
+    printBufferLong();
+    delay(4294967295);
   }
-
-  Serial.print("1");
 }
 
+// Load character into scroll buffer
+void loadBufferLong(int offset, bool still)
+{
+  int a;
+  unsigned long c, x;
+  // Center align code
+  int skip = 0, skip_offset;
+ for (a = 0; a < 8; a++) {
+    if (pgm_read_byte_near(font5x7 + (offset * 8) + a) == 0) {
+      skip++;
+    } else {
+      skip_offset = a;
+      break;
+    }
+  }
+ for (a = 7; a >= 0; a--) {
+    if (pgm_read_byte_near(font5x7 + (offset * 8) + a) == 0)
+      skip++;
+    else
+      break;
+  }
+  skip /= 2;
+  for (a = 0; a < skip; a++) {
+    c = 0;
+    x = bufferLong[a * 2];  // Load current scroll buffer
+    x = x | c;  // OR the new character onto end of current
+    bufferLong[a * 2] = x;  // Store in buffer
+  }
+ for (a = skip; a < 8 - skip_offset + 1; a++) { // Loop 7 times for a 5x7 font
+    c = pgm_read_byte_near(font5x7 + (offset * 8) + a - skip + skip_offset); // Index into character table to get row data
+    x = bufferLong[a * 2];  // Load current scroll buffer
+    x = x | c;  // OR the new character onto end of current
+    bufferLong[a * 2] = x;  // Store in buffer
+  }
+  for (a = 8 - skip_offset + 1; a < 8; a++) {
+    c = 0;
+    x = bufferLong[a * 2];  // Load current scroll buffer
+    x = x | c;  // OR the new character onto end of current
+    bufferLong[a * 2] = x;  // Store in buffer
+  }
+	//byte count = pgm_read_byte_near(font5x7 +((ascii - 0x20) * 9) + 8);     // Index into character table for kerning data
+	int count = trim_matrix(font5x7 + (offset * 8));
+	//byte count = 6;
+	for (a = 0; a < count; a++) {
+		rotateBufferLong();
+    if (!still) {
+		  printBufferLong();
+		  delay(scrollDelay);
+    }
+	}
+}
+
+// Rotate the buffer
+void rotateBufferLong()
+{
+	for (int a = 0; a < 8; a++) {	// Loop 7 times for a 5x7 font
+		unsigned long x = bufferLong[a * 2];	// Get low buffer entry
+		byte b = bitRead(x, 31);	// Copy high order bit that gets lost in rotation
+		x = x << 1;	// Rotate left one bit
+		bufferLong[a * 2] = x;	// Store new low buffer
+		x = bufferLong[a * 2 + 1];	// Get high buffer entry
+		x = x << 1;	// Rotate left one bit
+		bitWrite(x, 0, b);	// Store saved bit
+		bufferLong[a * 2 + 1] = x;	// Store new high buffer
+	}
+}
+
+// Display Buffer on LED matrix
+void printBufferLong()
+{
+	for (int a = 0; a < 8; a++) {	// Loop 7 times for a 5x7 font
+		unsigned long x = bufferLong[a * 2 + 1];	// Get high buffer entry
+		byte y = x;	// Mask off first character
+		lc.setRow(3, a, y);	// Send row to relevent MAX7219 chip
+		x = bufferLong[a * 2];	// Get low buffer entry
+		y = (x >> 24);	// Mask off second character
+		lc.setRow(2, a, y);	// Send row to relevent MAX7219 chip
+		y = (x >> 16);	// Mask off third character
+		lc.setRow(1, a, y);	// Send row to relevent MAX7219 chip
+		y = (x >> 8);	// Mask off forth character
+		lc.setRow(0, a, y);	// Send row to relevent MAX7219 chip
+	}
+}
