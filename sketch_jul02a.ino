@@ -43,9 +43,12 @@ void setup()
 	pinMode(motorPin, OUTPUT);
 
 	Serial.begin(115200);
+    //LoRa.setTimeout(500);
   LoRa.begin(38400);
-  //LoRa.setTimeout(1);
 }
+
+void showMessage(bool still, const unsigned char* PROGMEM txt, int size);
+void clearScreen(void);
 
 void loop()
 {
@@ -60,12 +63,22 @@ void loop()
     Serial.print(m);
     Serial.print("\n");
 
-    if (m == "0001") {
+	if (m == "0001") {
       setLPM(false);
       vib();
-      showMessage(false);
+      showMessage(false, txt1, sizeof(txt1) / 8);
       clearScreen();
-    }
+    } else if (m == "0002") {
+	  setLPM(false);
+	  vib();
+	  showMessage(false, txt2, sizeof(txt2) / 8);
+	  clearScreen();
+	} else if (m == "0003") {
+	  setLPM(false);
+	  vib();
+	  showMessage(false, txt3, sizeof(txt3) / 8);
+	  clearScreen();
+	}
   }
 	// scrollFont();
 }
@@ -100,11 +113,10 @@ int trim_matrix(const unsigned char *font)
 }
 
 // Show Message
-void showMessage(bool still)
+void showMessage(bool still, const unsigned char* PROGMEM txt, int size)
 {
-	int fontsize = sizeof(txt1) / 8;
-	for (int counter = 0; counter < fontsize; counter++) {
-		loadBufferLong(counter, still);
+	for (int counter = 0; counter < size; counter++) {
+		loadBufferLong(counter, still, txt);
 	}
   if (still) {
     printBufferLong();
@@ -113,14 +125,14 @@ void showMessage(bool still)
 }
 
 // Load character into scroll buffer
-void loadBufferLong(int offset, bool still)
+void loadBufferLong(int offset, bool still, const unsigned char* PROGMEM txt)
 {
   int a;
   unsigned long c, x;
   // Center align code
-  int skip = 0, skip_offset;
+  int skip = 0, skip_offset = 0;
  for (a = 0; a < 8; a++) {
-    if (pgm_read_byte_near(txt1 + (offset * 8) + a) == 0) {
+    if (pgm_read_byte_near(txt + (offset * 8) + a) == 0) {
       skip++;
     } else {
       skip_offset = a;
@@ -128,7 +140,7 @@ void loadBufferLong(int offset, bool still)
     }
   }
  for (a = 7; a >= 0; a--) {
-    if (pgm_read_byte_near(txt1 + (offset * 8) + a) == 0)
+    if (pgm_read_byte_near(txt + (offset * 8) + a) == 0)
       skip++;
     else
       break;
@@ -141,7 +153,7 @@ void loadBufferLong(int offset, bool still)
     bufferLong[a * 2] = x;  // Store in buffer
   }
  for (a = skip; a < 8 - skip_offset + 1; a++) { // Loop 7 times for a 5x7 font
-    c = pgm_read_byte_near(txt1 + (offset * 8) + a - skip + skip_offset); // Index into character table to get row data
+    c = pgm_read_byte_near(txt + (offset * 8) + a - skip + skip_offset); // Index into character table to get row data
     x = bufferLong[a * 2];  // Load current scroll buffer
     x = x | c;  // OR the new character onto end of current
     bufferLong[a * 2] = x;  // Store in buffer
@@ -152,8 +164,8 @@ void loadBufferLong(int offset, bool still)
     x = x | c;  // OR the new character onto end of current
     bufferLong[a * 2] = x;  // Store in buffer
   }
-  //byte count = pgm_read_byte_near(txt1 +((ascii - 0x20) * 9) + 8);     // Index into character table for kerning data
-  int count = trim_matrix(txt1 + (offset * 8));
+  //byte count = pgm_read_byte_near(txt +((ascii - 0x20) * 9) + 8);     // Index into character table for kerning data
+  int count = trim_matrix(txt + (offset * 8));
   //byte count = 6;
   for (a = 0; a < count; a++) {
     rotateBufferLong();
