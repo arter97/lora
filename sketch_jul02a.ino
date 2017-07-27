@@ -2,6 +2,8 @@
 // based on an orginal sketch by Arduino forum member "danigom"
 // http://forum.arduino.cc/index.php?action=profile;u=188950
 
+//#define SERIAL_BUFFER_SIZE 2048
+
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_PN532.h>
@@ -9,6 +11,9 @@
 #include <LedControl.h>
 #include "font.h"
 #include <LoRaShield.h>
+
+//#define SERIAL_BUFFER_SIZE 2048
+
 LoRaShield LoRa(10, 11);
 
 const int numDevices = 4;	// number of MAX7219s used
@@ -53,6 +58,7 @@ void setup()
     //LoRa.setTimeout(500);
   LoRa.begin(38400);
 
+#if 0
     nfc.begin();
  
     uint32_t versiondata = nfc.getFirmwareVersion();
@@ -75,6 +81,7 @@ void setup()
     nfc.SAMConfig();
  
     Serial.print("\r\nWaiting for an ISO14443A card");
+#endif
 }
 
 void showMessage(bool still, const unsigned char* PROGMEM txt, int size);
@@ -83,13 +90,10 @@ void nfcReader(void);
 
 void loop()
 {
-    if (LoRa.available() > 0) {
+    while (LoRa.available() > 0) {
       String s;
       String m;
-
-      for (;;) {
-        Serial.println("Looping");
-        
+  
         s = LoRa.ReadLine();
         m = LoRa.getMessage();
         if (s.length()) {
@@ -102,6 +106,8 @@ void loop()
           Serial.print(m);
           Serial.print("\'\n");
         }
+
+        Serial.flush();
     
         if (m == "0001") {
           setLPM(false);
@@ -119,21 +125,11 @@ void loop()
           showMessage(false, txt3, sizeof(txt3) / 8);
           clearScreen();
         }
-
-        if (s.startsWith("OnRadioTxDone") || s.startsWith("PrepareRxDoneAbort")) {
-          while (LoRa.available() > 0)
-            LoRa.read();
-          LoRa.flush();
-          
-          break;
-        }
-
-        delay(10);
-      }
-        Serial.println("Loop exited");
     }
+    
+    //delay(200);
       
-    nfcReader();
+    //nfcReader();
 }
 
 void nfcReader(void)
@@ -151,9 +147,9 @@ void nfcReader(void)
     temparr[4]='4';
 
 Serial.println("NFC CALLED");
-    
-    success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength, 500);
- 
+
+    //success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength, 500);
+     
     if (success)
     {
         Serial.print("\r\nFound a card!");
@@ -187,6 +183,8 @@ Serial.println("NFC CALLED");
         // PN532 probably timed out waiting for a card
         //Serial.print("\r\nTimed out waiting for a card");
     }
+
+    Serial.flush();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
