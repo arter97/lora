@@ -1,3 +1,5 @@
+#include <SPI.h>
+
 
 // based on an orginal sketch by Arduino forum member "danigom"
 // http://forum.arduino.cc/index.php?action=profile;u=188950
@@ -11,6 +13,7 @@
 #include <LedControl.h>
 #include "font.h"
 #include <LoRaShield.h>
+#include <Time.h>
 
 //#define SERIAL_BUFFER_SIZE 2048
 
@@ -49,6 +52,14 @@ void setLPM(bool val) {
   }
 }
 
+void setBrightness(int val) {
+  for (int x = 0; x < numDevices; x++) {
+    lc.shutdown(x, false); //The MAX72XX is in power-saving mode on startup
+    lc.setIntensity(x, val); // Set the brightness to default value
+    lc.clearDisplay(x); // and clear the display
+  }
+}
+
 void setup()
 {
   setLPM(true);
@@ -57,6 +68,8 @@ void setup()
 	Serial.begin(115200);
     //LoRa.setTimeout(500);
   LoRa.begin(38400);
+
+//  setTime(22,22,0,0,0,0);
 
 #if 0
     nfc.begin();
@@ -87,9 +100,11 @@ void setup()
 void showMessage(bool still, const unsigned char* PROGMEM txt, int size);
 void clearScreen(void);
 void nfcReader(void);
+void showTime(void);
 
 void loop()
 {
+    //showTime();return;
     while (LoRa.available() > 0) {
       String s;
       String m;
@@ -124,12 +139,53 @@ void loop()
           vib();
           showMessage(false, txt3, sizeof(txt3) / 8);
           clearScreen();
+        } else if (m == "0004") {
+          setLPM(false);
+          vib();
+          showMessage(false, txt4, sizeof(txt4) / 8);
+          clearScreen();
+        } else if (m.startsWith("0005")) {
+          setTime(m.substring(4,6).toInt(), m.substring(7,9).toInt(), 0, 0, 0, 0);
         }
     }
     
     //delay(200);
       
     //nfcReader();
+}
+
+void showTime(void) {
+   time_t t = now(); // Store the current time in time 
+
+   int t_hour = hour(t);
+   int t_min = minute(t);
+
+   if (t_hour > 12)
+     t_hour -= 12;
+
+   //Serial.println(t_hour);
+   //Serial.println(t_min);
+
+   setBrightness(3);
+   memset(bufferLong, 0, sizeof(bufferLong));
+
+   if (t_hour >= 10) 
+     loadBufferLong(t_hour / 10, true, time_txt);
+   loadBufferLong(t_hour % 10, true, time_txt);
+   loadBufferLong(11, true, time_txt); // space
+   loadBufferLong(10, true, time_txt); // :
+   loadBufferLong(11, true, time_txt); // space
+   if (t_min < 10)
+     loadBufferLong(0, true, time_txt);
+   else
+     loadBufferLong(t_min / 10, true, time_txt);
+   loadBufferLong(t_min % 10, true, time_txt);
+
+   rotateBufferLong(); // Move by 1 pixel
+
+   printBufferLong();
+
+   delay(5000);
 }
 
 void nfcReader(void)
@@ -224,7 +280,7 @@ void showMessage(bool still, const unsigned char* PROGMEM txt, int size)
 	}
   if (still) {
     printBufferLong();
-    delay(4294967295); // Unsigned Long MAX
+    //delay(4294967295); // Unsigned Long MAX
   }
 }
 
