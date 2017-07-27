@@ -9,7 +9,7 @@
 LoRaShield LoRa(10, 11);
 
 const int numDevices = 4;	// number of MAX7219s used
-const long scrollDelay = 50;	// adjust scrolling speed
+const long scrollDelay = 30;	// adjust scrolling speed
 
 const int motorPin = 12;
 
