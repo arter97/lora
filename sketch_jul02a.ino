@@ -137,8 +137,9 @@ void loop()
         } else if (m == "0003") {
           setLPM(false);
           vib();
-          showMessage(false, txt3, sizeof(txt3) / 8);
-          clearScreen();
+          showMessage(true, txt3, sizeof(txt3) / 8);
+          delay(10000);
+          //clearScreen();
         } else if (m == "0004") {
           setLPM(false);
           vib();
