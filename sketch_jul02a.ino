@@ -146,23 +146,41 @@ void loop()
           showMessage(false, txt4, sizeof(txt4) / 8);
           clearScreen();
         } else if (m.startsWith("0005")) {
-          setTime(m.substring(4,6).toInt(), m.substring(7,9).toInt(), 0, 0, 0, 0);
+          int hour_int = m.substring(4,6).toInt();
+          int minute_int = m.substring(6,8).toInt();
+          int second_int = m.substring(8,10).toInt();
+
+          Serial.print("Hour : ");
+          Serial.println(hour_int);
+          Serial.print("Minute : ");
+          Serial.println(minute_int);
+          Serial.print("Second : ");
+          Serial.println(second_int);
+
+          setTime(hour_int, minute_int, second_int, 0, 0, 0);
         }
     }
+
+    showTime();
     
     //delay(200);
       
     //nfcReader();
 }
 
+int t_hour = -1;
+int t_min = -1;
 void showTime(void) {
    time_t t = now(); // Store the current time in time 
 
-   int t_hour = hour(t);
-   int t_min = minute(t);
-
    if (t_hour > 12)
      t_hour -= 12;
+
+   if (t_hour == hour(t) && t_min == minute(t))
+      return;
+
+   t_hour = hour(t);
+   t_min = minute(t);
 
    //Serial.println(t_hour);
    //Serial.println(t_min);
@@ -276,6 +294,9 @@ int trim_matrix(const unsigned char *font)
 // Show Message
 void showMessage(bool still, const unsigned char* PROGMEM txt, int size)
 {
+  memset(bufferLong, 0, sizeof(bufferLong));
+  t_hour = -1; // Force reset
+  
 	for (int counter = 0; counter < size; counter++) {
 		loadBufferLong(counter, still, txt);
 	}
