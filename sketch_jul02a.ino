@@ -1,26 +1,82 @@
-#include <LoRaShield.h>
-#include <stdio.h>
+// based on an orginal sketch by Arduino forum member "danigom"
+// http://forum.arduino.cc/index.php?action=profile;u=188950
+
+//#define SERIAL_BUFFER_SIZE 2048
+
+#include <math.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_PN532.h>
+#include <avr/pgmspace.h>
+#include <LedControl.h>
+#include "font.h"
+#include <LoRaShield.h>
+#include <Time.h>
+
+int BUTTON = 13;
+int state = 0;
+String s, m, m2, m3, t, t2, t3;
+
+//#define SERIAL_BUFFER_SIZE 2048
+
+LoRaShield LoRa(10, 11);
+
+const int numDevices = 4;	// number of MAX7219s used
+const long scrollDelay = 30;	// adjust scrolling speed
+
+const int motorPin = 12;
+
+unsigned long bufferLong[16] = { 0 };
+
+LedControl lc = LedControl(5, 7, 6, numDevices);
 
 #define PN532_IRQ   (9) // (2)  <- changed to D9 for IRQ pin, refer to schematic
 #define PN532_RESET (8) // (3)  <- changed to D8 for nReset pin, refer to schematic
 Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
- 
-int BUTTON = 13;
-int state = 0;
-String s, m, m2, t, t2;
-LoRaShield LoRa(10,11);
- 
+
 void nfcReader(void);
 
-void setup() {
-  Serial.begin(115200);
+void vib()
+{
+	digitalWrite(motorPin, HIGH);
+	delay(250);
+	digitalWrite(motorPin, LOW);
+	delay(100);
+	digitalWrite(motorPin, HIGH);
+	delay(250);
+	digitalWrite(motorPin, LOW);
+	//delay(200);
+}
+
+void setLPM(bool val) {
+  for (int x = 0; x < numDevices; x++) {
+    lc.shutdown(x, val); //The MAX72XX is in power-saving mode on startup
+    lc.setIntensity(x, 10); // Set the brightness to default value
+    lc.clearDisplay(x); // and clear the display
+  }
+}
+
+void setBrightness(int val) {
+  for (int x = 0; x < numDevices; x++) {
+    lc.shutdown(x, false); //The MAX72XX is in power-saving mode on startup
+    lc.setIntensity(x, val); // Set the brightness to default value
+    lc.clearDisplay(x); // and clear the display
+  }
+}
+
+void setup()
+{
+  setLPM(true);
+	pinMode(motorPin, OUTPUT);
+
+	Serial.begin(115200);
+    //LoRa.setTimeout(500);
   LoRa.begin(38400);
+
+//  setTime(22,22,0,0,0,0);
   pinMode(BUTTON, INPUT);
 
-      nfc.begin();
+    nfc.begin();
  
     uint32_t versiondata = nfc.getFirmwareVersion();
     if (! versiondata)
@@ -43,7 +99,20 @@ void setup() {
  
     Serial.print("\r\nWaiting for an ISO14443A card");
 }
- 
+
+void showMessage(bool still, const unsigned char* PROGMEM txt, int size);
+void clearScreen(void);
+void nfcReader(void);
+void showTime(void);
+
+int powint(int factor, unsigned int exponent)
+{
+   int product = 1;
+   while (exponent--)
+      product *= factor;
+   return product;
+}
+
 void loop() {
   while (digitalRead(BUTTON) == LOW)
   {
@@ -59,23 +128,98 @@ void loop() {
       {
         m2=m;
         Serial.println(m);
-        t=m2.substring(0,1);
-        if(t=="0")
-        {
+        t=m2.substring(0,4);
+        if(t=="1000")
+        {  
+          int index, i;
+          for(i=4; i<12; i++)
+          {
+            t2=m2.substring(i,i+1);
+            if(t2!="0")
+            {
+              index = i;
+            }
+          }          
           Serial.print("spend : ");
-          t2 = m.substring(1,7);
-          Serial.print(t2);
+          t3 = m.substring(index,12);
+          Serial.print(t3);
+          Serial.print("원");
+          Serial.println();
+
+
+          setLPM(false);
+          vib();
+
+   memset(bufferLong, 0, sizeof(bufferLong));
+
+int to_min = t3.toInt();
+for (int i = log10(to_min); i >= 0; i--) {
+  loadBufferLong((to_min / pow(10, i)), false, time_txt);
+  to_min = to_min % powint(10, i);
+}
+
+   loadBufferLong(13, false, time_txt);
+
+  for (int i = 0; i < 32; i++) {
+   rotateBufferLong();
+   delay(scrollDelay);
+   printBufferLong();
+  }
+          
+
+          // Clear screen
+          memset(bufferLong, 0, sizeof(bufferLong));
+          setLPM(true);
+
+
+
         }
-        else
+        else if(t=="1001")
         {
+          int index, i;
+          for(i=4; i<12; i++)
+          {
+            t2=m2.substring(i,i+1);
+            if(t2!="0")
+            {
+              index = i;
+            }
+          }          
           Serial.print("waiting time : ");
-          t2 = m.substring(1,5);
-          Serial.print(t2);
+          t3 = m.substring(index,12);
+          Serial.print(t3);
+
+
+          setLPM(false);
+          vib();
+
+   memset(bufferLong, 0, sizeof(bufferLong));
+int to_min = t3.toInt();
+for (int i = log10(to_min); i >= 0; i--) {
+  loadBufferLong((to_min / pow(10, i)), true, time_txt);
+  to_min = to_min % powint(10, i);
+}
+
+loadBufferLong(12, true, time_txt); // Min
+
+   for (int i = 0; i < 9; i++)
+   rotateBufferLong(); // Move by 9 pixel
+
+   printBufferLong();
+
+
+          
+          delay(10000);
+
+          // Clear screen
+          memset(bufferLong, 0, sizeof(bufferLong));
+          setLPM(true);
+
         }
       }
     }
   }
-
+ 
   nfcReader();
 }
 
@@ -127,4 +271,151 @@ void nfcReader(void)
         // PN532 probably timed out waiting for a card
         //Serial.print("\r\nTimed out waiting for a card");
     }
+
+    Serial.flush();
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int trim_matrix(const unsigned char *font)
+{
+	int i;
+	int j;
+	const unsigned char product = 1;
+	int ret = 0;
+	unsigned char temp;
+
+	for (i = 0; i < 8; i++) {
+		temp = pgm_read_byte_near((font + i));
+		for (j = 0; j < 8; j++) {
+			if ((product & temp) == 1) {
+				if (ret < (8 - j)) {	// 8-j == length
+					ret = 8 - j;
+				}
+				break;
+			}
+			temp = (temp >> 1);
+		}
+	}
+
+	if (ret == 0)
+		return 3;	// Space
+
+	return ret + 1;
+}
+
+// Show Message
+void showMessage(bool still, const unsigned char* PROGMEM txt, int size)
+{
+  memset(bufferLong, 0, sizeof(bufferLong));
+  
+	for (int counter = 0; counter < size; counter++) {
+		loadBufferLong(counter, still, txt);
+	}
+  if (still) {
+    printBufferLong();
+    //delay(4294967295); // Unsigned Long MAX
+  }
+}
+
+// Load character into scroll buffer
+void loadBufferLong(int offset, bool still, const unsigned char* PROGMEM txt)
+{
+  int a;
+  unsigned long c, x;
+  // Center align code
+  int skip = 0, skip_offset = 0;
+ for (a = 0; a < 8; a++) {
+    if (pgm_read_byte_near(txt + (offset * 8) + a) == 0) {
+      skip++;
+    } else {
+      skip_offset = a;
+      break;
+    }
+  }
+ for (a = 7; a >= 0; a--) {
+    if (pgm_read_byte_near(txt + (offset * 8) + a) == 0)
+      skip++;
+    else
+      break;
+  }
+  skip /= 2;
+  for (a = 0; a < skip; a++) {
+    c = 0;
+    x = bufferLong[a * 2];  // Load current scroll buffer
+    x = x | c;  // OR the new character onto end of current
+    bufferLong[a * 2] = x;  // Store in buffer
+  }
+ for (a = skip; a < 8 - skip_offset + 1; a++) { // Loop 7 times for a 5x7 font
+    c = pgm_read_byte_near(txt + (offset * 8) + a - skip + skip_offset); // Index into character table to get row data
+    x = bufferLong[a * 2];  // Load current scroll buffer
+    x = x | c;  // OR the new character onto end of current
+    bufferLong[a * 2] = x;  // Store in buffer
+  }
+  for (a = 8 - skip_offset + 1; a < 8; a++) {
+    c = 0;
+    x = bufferLong[a * 2];  // Load current scroll buffer
+    x = x | c;  // OR the new character onto end of current
+    bufferLong[a * 2] = x;  // Store in buffer
+  }
+  //byte count = pgm_read_byte_near(txt +((ascii - 0x20) * 9) + 8);     // Index into character table for kerning data
+  int count = trim_matrix(txt + (offset * 8));
+  //byte count = 6;
+  for (a = 0; a < count; a++) {
+    rotateBufferLong();
+    if (!still) {
+      printBufferLong();
+      delay(scrollDelay);
+    }
+  }
+}
+
+void clearScreen(void)
+{
+    int a;
+    unsigned long c, x;
+   for (a = 0; a < 8; a++) { // Loop 7 times for a 5x7 font
+      c = 0;
+      x = bufferLong[a * 2];  // Load current scroll buffer
+      x = x | c;  // OR the new character onto end of current
+      bufferLong[a * 2] = x;  // Store in buffer
+    }
+    int count = 32;
+    for (a = 0; a < count; a++) {
+      rotateBufferLong();
+      printBufferLong();
+      delay(scrollDelay);
+    }
+}
+
+// Rotate the buffer
+void rotateBufferLong()
+{
+	for (int a = 0; a < 8; a++) {	// Loop 7 times for a 5x7 font
+		unsigned long x = bufferLong[a * 2];	// Get low buffer entry
+		byte b = bitRead(x, 31);	// Copy high order bit that gets lost in rotation
+		x = x << 1;	// Rotate left one bit
+		bufferLong[a * 2] = x;	// Store new low buffer
+		x = bufferLong[a * 2 + 1];	// Get high buffer entry
+		x = x << 1;	// Rotate left one bit
+		bitWrite(x, 0, b);	// Store saved bit
+		bufferLong[a * 2 + 1] = x;	// Store new high buffer
+	}
+}
+
+// Display Buffer on LED matrix
+void printBufferLong()
+{
+	for (int a = 0; a < 8; a++) {	// Loop 7 times for a 5x7 font
+		unsigned long x = bufferLong[a * 2 + 1];	// Get high buffer entry
+		byte y = x;	// Mask off first character
+		lc.setRow(3, a, y);	// Send row to relevent MAX7219 chip
+		x = bufferLong[a * 2];	// Get low buffer entry
+		y = (x >> 24);	// Mask off second character
+		lc.setRow(2, a, y);	// Send row to relevent MAX7219 chip
+		y = (x >> 16);	// Mask off third character
+		lc.setRow(1, a, y);	// Send row to relevent MAX7219 chip
+		y = (x >> 8);	// Mask off forth character
+		lc.setRow(0, a, y);	// Send row to relevent MAX7219 chip
+	}
 }
